@@ -262,7 +262,7 @@ def draw(screen, repos, selected, root, message, busy, popup, ascii_icons, draft
     branch_w = min(24, max(12, width // 6))
     def row(name, branch, commits, status, details):
         return f"{clip(name, repo_w)} {clip(branch, branch_w)} {clip(commits, 7)} {clip(status, 11)} {details}"
-    put(3, 1, row("Repo", "Branch", "Commits", "Status", "Details"), title)
+    put(3, 3, row("Repo", "Branch", "Commits", "Status", "Details"), title)
     visible = height - 14
     start = max(0, selected - visible + 1)
     for i, repo in enumerate(repos[start:start + visible], start):
@@ -270,8 +270,11 @@ def draw(screen, repos, selected, root, message, busy, popup, ascii_icons, draft
         icon = "|/-\\"[int(time.monotonic() * 8) % 4] if status == "PUSHING" else repo.icon
         if ascii_icons:
             icon = {"↑": "+", "✓": "v", "·": "."}.get(icon, icon)
-        attr = curses.A_REVERSE if i == selected else curses.color_pair(3 if repo.dirty or repo.network_error else 2 if repo.ahead or repo.behind else 4 if repo.status == "SYNCED" else 0)
-        put(4 + i - start, 1, row(f"{icon} {repo.path.name}", repo.branch,
+        attr = curses.color_pair(3 if repo.dirty or repo.network_error else 2 if repo.ahead or repo.behind else 4 if repo.status == "SYNCED" else 0)
+        if i == selected:
+            attr |= curses.A_BOLD
+            put(4 + i - start, 1, ">" if ascii_icons else "▶", attr)
+        put(4 + i - start, 3, row(f"{icon} {repo.path.name}", repo.branch,
             "?" if repo.ahead is None else str(repo.ahead), status,
             ("Fetch failed; " if repo.network_error else "") + repo.detail), attr)
     if not repos:

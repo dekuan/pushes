@@ -34,6 +34,8 @@ python3 pushes.py --once
 
 The header shows the application name, the system's local time updated every second, the UTC offset, and the directory being scanned. The table contains `Repo / Branch / Commits / Status / Details`. The details area shows the selected repository's remote address, latest commit hash, timestamp and message, history count, upstream, and last successful fetch time.
 
+The selected repository is marked with a left-side `▶` and bold text, preserving its status color and the terminal background. With `--ascii`, the marker is `>`.
+
 | Key | Action |
 | --- | --- |
 | ↑ / ↓ or K / J | Select a repository or branch |
