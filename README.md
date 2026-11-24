@@ -42,9 +42,12 @@ The header shows the application name, the system's local time updated every sec
 | C | Enter a commit message at the bottom; Enter stages and commits all changes, Esc cancels |
 | Esc | Close the branch menu or cancel commit input |
 | F | Fetch only the selected repository, regardless of its commit count |
+| T | Move the selected repository to the top, keeping it selected, and save the complete order to `.pushes` |
 | Q | Quit |
 
 Status icons: 🧨 uncommitted changes, including untracked files; 🟡 commits ahead of the upstream; ✓ a clean working tree matching the upstream; `!` a state requiring attention, such as being behind, diverged, or missing an upstream. The uncommitted-changes icon takes priority, while the commit count is shown independently. If your terminal displays emoji widths incorrectly, use `--ascii` for `*` / `+` / `v` icons.
+
+Repository order is loaded from `.pushes` in the launch directory (or the directory passed on the command line). Each press of T saves the complete current order there as JSON using relative repository paths. Repositories missing from the saved list appear at the end in discovery order; saved entries for repositories that no longer exist are ignored. The file is created only when you press T, and starting or quitting the application does not create or rewrite it. If saving fails, the order still changes for the current session and an error is displayed.
 
 Local refreshes keep the repository's status visible without flashing an operation label. Remote fetches display `FETCHING`; other operations display `PUSHING`, `COMMITTING`, or `SWITCHING`.
 

@@ -1,4 +1,5 @@
 import os
+import json
 from pathlib import Path
 import subprocess
 import tempfile
@@ -6,6 +7,44 @@ import unittest
 from unittest.mock import patch
 
 import pushes
+
+
+class SavedOrder(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.paths = [self.root / name for name in ("a", "b", "中文")]
+
+    def test_reading_without_config_does_not_create_file(self):
+        self.assertEqual(pushes.load_order(self.root, self.paths), self.paths)
+        self.assertFalse((self.root / ".pushes").exists())
+
+    def test_saved_order_survives_restart_and_new_repositories_go_last(self):
+        order = [self.paths[2], self.paths[0], self.paths[1]]
+        pushes.save_order(self.root, order)
+        config = self.root / ".pushes"
+        self.assertEqual(json.loads(config.read_text())["order"], ["中文", "a", "b"])
+        before = config.read_bytes()
+        new = self.root / "new"
+        self.assertEqual(pushes.load_order(self.root, [new] + self.paths), order + [new])
+        self.assertEqual(pushes.load_order(self.root, [new, self.paths[1]]), [self.paths[1], new])
+        self.assertEqual(config.read_bytes(), before)
+        pushes.save_order(self.root, [self.paths[1], self.paths[2], self.paths[0]])
+        self.assertEqual(pushes.load_order(self.root, self.paths), [self.paths[1], self.paths[2], self.paths[0]])
+
+    def test_invalid_config_and_failed_save_preserve_previous_file(self):
+        config = self.root / ".pushes"
+        config.write_text('{"order": "bad"}')
+        with self.assertRaises(ValueError):
+            pushes.load_order(self.root, self.paths)
+        pushes.save_order(self.root, self.paths)
+        before = config.read_bytes()
+        with patch.object(pushes.os, "replace", side_effect=OSError("read-only")):
+            with self.assertRaises(OSError):
+                pushes.save_order(self.root, self.paths[::-1])
+        self.assertEqual(config.read_bytes(), before)
+        self.assertEqual(list(self.root.iterdir()), [config])
 
 
 class TerminalFormatting(unittest.TestCase):

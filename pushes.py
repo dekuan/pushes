@@ -4,11 +4,13 @@ import argparse
 import concurrent.futures
 import curses
 import datetime as dt
+import json
 import locale
 import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import time
 import unicodedata
 from dataclasses import dataclass, field
@@ -52,6 +54,40 @@ def discover(root):
             if top and Path(top).resolve() == child.resolve():
                 found.append(child)
     return found
+
+
+def order_key(root, path):
+    return Path(os.path.relpath(path, root)).as_posix()
+
+
+def load_order(root, paths):
+    try:
+        config = json.loads((root / ".pushes").read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return paths
+    if not isinstance(config, dict) or not isinstance(config.get("order"), list) or not all(
+        isinstance(name, str) for name in config["order"]
+    ):
+        raise ValueError(".pushes must contain an order array of repository paths")
+    ranks = {}
+    for name in config["order"]:
+        ranks.setdefault(name, len(ranks))
+    return sorted(paths, key=lambda path: ranks.get(order_key(root, path), len(ranks)))
+
+
+def save_order(root, paths):
+    config = {"order": [order_key(root, path) for path in paths]}
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=root,
+                                         prefix=".pushes-", delete=False) as output:
+            temporary = Path(output.name)
+            json.dump(config, output, ensure_ascii=False, indent=2)
+            output.write("\n")
+        os.replace(temporary, root / ".pushes")
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 @dataclass
@@ -250,7 +286,7 @@ def draw(screen, repos, selected, root, message, busy, popup, ascii_icons, draft
         put(base + 4, 1, f"Upstream: {repo.upstream or 'unset'}")
         put(base + 5, 1, "Fetch: " + repo.network_error if repo.network_error else repo.detail)
     put(height - 3, 1, "Message: " + message, title)
-    put(height - 1, 1, "↑/↓ select  Enter push  C commit  B branches  F fetch  Q quit", title)
+    put(height - 1, 1, "↑/↓ select  Enter push  C commit  B branches  F fetch  T top  Q quit", title)
     if popup is not None:
         entries, choice = popup
         box_h = min(len(entries) + 3, height - 4)
@@ -291,8 +327,13 @@ def tui(screen, args, root):
         for n, color in enumerate((curses.COLOR_YELLOW, curses.COLOR_YELLOW, curses.COLOR_RED, curses.COLOR_GREEN), 1):
             curses.init_pair(n, color, -1)
     screen.timeout(100)
-    repos = [Repo(p) for p in discover(root)]
+    paths = discover(root)
     selected, popup, message = 0, None, "Checking repositories…"
+    try:
+        paths = load_order(root, paths)
+    except (OSError, ValueError) as exc:
+        message = f"Could not load .pushes; using default order: {exc}"
+    repos = [Repo(p) for p in paths]
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=4)
     pending, next_scan, next_fetch = {}, {}, {}
     activities = {}
@@ -396,6 +437,15 @@ def tui(screen, args, root):
                 selected = min(max(0, len(repos) - 1), selected + 1)
             elif key in (curses.KEY_UP, ord('k')):
                 selected = max(0, selected - 1)
+            elif repos and key in (ord('t'), ord('T')):
+                repo = repos.pop(selected)
+                repos.insert(0, repo)
+                selected = 0
+                try:
+                    save_order(root, [r.path for r in repos])
+                    message = f"Moved {repo.path.name} to the top; saved order to .pushes"
+                except OSError as exc:
+                    message = f"Moved {repo.path.name}; could not save .pushes: {exc}"
             elif key in (ord('f'), ord('F')):
                 if repos:
                     repo = repos[selected]
@@ -448,7 +498,7 @@ def main():
             parser.error("directory must be a directory")
         git(root, "--version")
         if args.once:
-            for path in discover(root):
+            for path in load_order(root, discover(root)):
                 repo = inspect(path)
                 print(f"{repo.icon} {path.name}\t{repo.branch}\t{repo.ahead if repo.ahead is not None else '?'}\t{repo.status}\t{repo.detail}")
         else:
@@ -458,7 +508,7 @@ def main():
             curses.wrapper(tui, args, root)
     except KeyboardInterrupt:
         return 130
-    except (GitError, OSError, curses.error) as exc:
+    except (GitError, OSError, ValueError, curses.error) as exc:
         print(f"pushes: {exc}", file=sys.stderr)
         return 1
     return 0
