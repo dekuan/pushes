@@ -1,7 +1,7 @@
 #compdef pushes
 _arguments \
   '--interval[local refresh interval in seconds]:seconds:' \
-  '--fetch-interval[fetch interval; 0 disables automatic fetch]:seconds:' \
+  '--fetch-interval[automatic fetch interval when ahead > 0; 0 disables]:seconds:' \
   '--ascii[use plain status icons]' \
   '--once[print local status and exit]' \
   '--help[show help]' \

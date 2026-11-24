@@ -196,6 +196,10 @@ def cell_width(text):
     return sum(0 if unicodedata.combining(c) else 2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in text)
 
 
+def should_fetch(repo, interval, now, deadline, manual=False):
+    return manual or (interval > 0 and repo.ahead is not None and repo.ahead > 0 and now >= deadline)
+
+
 def draw(screen, repos, selected, root, message, busy, popup, ascii_icons, draft=None):
     screen.erase()
     height, width = screen.getmaxyx()
@@ -246,7 +250,7 @@ def draw(screen, repos, selected, root, message, busy, popup, ascii_icons, draft
         put(base + 4, 1, f"Upstream: {repo.upstream or 'unset'}")
         put(base + 5, 1, "Fetch: " + repo.network_error if repo.network_error else repo.detail)
     put(height - 3, 1, "Message: " + message, title)
-    put(height - 1, 1, "↑/↓ select  Enter push  C commit  B branches  G fetch  Q quit", title)
+    put(height - 1, 1, "↑/↓ select  Enter push  C commit  B branches  F fetch  Q quit", title)
     if popup is not None:
         entries, choice = popup
         box_h = min(len(entries) + 3, height - 4)
@@ -326,8 +330,9 @@ def tui(screen, args, root):
             for repo in repos:
                 if draft is not None and repo.path == draft.path:
                     continue
-                if repo.path not in pending and now >= next_scan.get(repo.path, 0):
-                    fetch = repo.path in requested_fetch or (args.fetch_interval > 0 and now >= next_fetch.get(repo.path, 0))
+                fetch = should_fetch(repo, args.fetch_interval, now,
+                                     next_fetch.get(repo.path, 0), repo.path in requested_fetch)
+                if repo.path not in pending and (now >= next_scan.get(repo.path, 0) or fetch):
                     requested_fetch.discard(repo.path)
                     submit(repo, fetch)
                     next_scan[repo.path] = now + args.interval
@@ -391,7 +396,7 @@ def tui(screen, args, root):
                 selected = min(max(0, len(repos) - 1), selected + 1)
             elif key in (curses.KEY_UP, ord('k')):
                 selected = max(0, selected - 1)
-            elif key in (ord('g'), ord('G')):
+            elif key in (ord('f'), ord('F')):
                 old_path = repos[selected].path if repos else None
                 paths = discover(root)
                 existing = {r.path: r for r in repos}
@@ -434,7 +439,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", nargs="?", default=".", type=Path)
     parser.add_argument("--interval", type=positive, default=5, help="local refresh seconds (default: 5)")
-    parser.add_argument("--fetch-interval", type=int, default=30, help="fetch seconds (default: 30); 0 disables automatic fetch")
+    parser.add_argument("--fetch-interval", type=int, default=30, help="automatic fetch seconds when ahead > 0 (default: 30); 0 disables")
     parser.add_argument("--ascii", action="store_true", help="use plain status icons")
     parser.add_argument("--once", action="store_true", help="print local status and exit without fetching")
     args = parser.parse_args()

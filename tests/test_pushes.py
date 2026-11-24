@@ -16,6 +16,25 @@ class TerminalFormatting(unittest.TestCase):
         self.assertNotIn("\x1b", pushes.clean("bad\x1b[2J\nname"))
 
 
+class FetchPolicy(unittest.TestCase):
+    def test_automatic_fetch_requires_unpushed_commits_and_elapsed_interval(self):
+        repo = pushes.Repo(Path("unused"))
+        for count in (None, 0):
+            repo.ahead = count
+            repo.dirty = True
+            self.assertFalse(pushes.should_fetch(repo, 30, 100, 0))
+        repo.ahead = 1
+        self.assertTrue(pushes.should_fetch(repo, 30, 100, 100))
+        self.assertFalse(pushes.should_fetch(repo, 30, 99, 100))
+        self.assertFalse(pushes.should_fetch(repo, 0, 100, 0))
+
+    def test_manual_fetch_bypasses_count_interval_and_disable_setting(self):
+        repo = pushes.Repo(Path("unused"))
+        for count in (None, 0, 1):
+            repo.ahead = count
+            self.assertTrue(pushes.should_fetch(repo, 0, 1, 100, manual=True))
+
+
 class GitIntegration(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
