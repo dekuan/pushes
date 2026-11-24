@@ -1,26 +1,26 @@
 # Pushes for Git
 
-一个以 **push** 为核心、支持一键暂存并提交全部改动的轻量 TUI，优先支持 macOS，也可在有 Python curses 的 Linux 终端使用。免费开源，MIT 许可证。无需 GitHub Desktop，不依赖 GitHub API，也适用于其他 Git 远端。
+A lightweight Git TUI focused on **pushing**, with one-step staging and committing of all changes. Built primarily for macOS; also works in Linux terminals with Python curses support. Free and open source under the MIT license. Works with GitHub and other Git remotes, without GitHub Desktop or the GitHub API.
 
-## 安装与启动
+## Installation and usage
 
-需要 Git、Python **3.9+**（含标准库 `curses`），无需 pip 包。macOS 不保证自带可用的 Python 3，可从 [Python 官网](https://www.python.org/downloads/macos/) 安装。Git 可通过 `xcode-select --install` 安装。
+Requires Git and **Python 3.9+** with the standard-library `curses` module. No pip packages are needed. macOS may not include a usable Python 3 installation; you can install it from [python.org](https://www.python.org/downloads/macos/). To install Git on macOS, run `xcode-select --install`.
 
-从当前克隆安装：
-
-```sh
-sh install.sh
-```
-
-安装到 `~/.local/bin/pushes`，无需 sudo；脚本会打印 PATH 和 zsh 补全配置，按输出加入 `~/.zshrc`。配置后重新打开终端，可在任意目录输入 `pushes`，并用 Tab 补全命令、选项和目录。支持 `PUSHES_BIN_DIR`、`PUSHES_COMPLETION_DIR` 自定义安装位置。
-
-代码发布到 GitHub 的 `main` 后，可通过 URL 安装（当前本地修改尚未发布）：
+Install from the URL:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/dekuan/pushes/main/install.sh | sh
 ```
 
-也可直接运行：
+Or install from a local clone:
+
+```sh
+sh install.sh
+```
+
+The script installs the command to `~/.local/bin/pushes` without sudo. It prints the PATH and zsh completion settings to add to `~/.zshrc`. After adding them, open a new terminal and run `pushes` from any directory. Tab completion supports the command name, options, and directory paths. Set `PUSHES_BIN_DIR` and `PUSHES_COMPLETION_DIR` to customize the installation locations.
+
+You can also run the Python script directly:
 
 ```sh
 python3 pushes.py
@@ -30,40 +30,42 @@ python3 pushes.py --fetch-interval 0 --ascii
 python3 pushes.py --once
 ```
 
-## 界面与操作
+## Interface and controls
 
-顶部显示名称、当前系统本地时间（每秒更新）、UTC 时区偏移，以及扫描目录。表格为 `Repo / Branch / Commits / Status / Details`；底部显示选中仓库的远端地址、历史提交数量、最新提交时间和摘要、上游及最近成功 fetch 时间。
+The header shows the application name, the system's local time updated every second, the UTC offset, and the directory being scanned. The table contains `Repo / Branch / Commits / Status / Details`. The details area shows the selected repository's remote address, latest commit hash, timestamp and message, history count, upstream, and last successful fetch time.
 
-| 键 | 功能 |
+| Key | Action |
 | --- | --- |
-| ↑ / ↓ 或 K / J | 选择仓库或分支 |
-| Enter | 对选中的仓库执行 `git push`；在分支列表中确认切换 |
-| B | 打开本地和远端分支列表 |
-| C | 底部输入 commit message，Enter 暂存并提交全部改动，Esc 取消 |
-| Esc | 关闭分支列表 |
-| G | 重新发现仓库，并请求刷新和 fetch |
-| Q | 退出 |
+| ↑ / ↓ or K / J | Select a repository or branch |
+| Enter | Run `git push` for the selected repository; confirm a selection in the branch menu |
+| B | Open the list of local and remote branches |
+| C | Enter a commit message at the bottom; Enter stages and commits all changes, Esc cancels |
+| Esc | Close the branch menu or cancel commit input |
+| G | Rediscover repositories and request a refresh and fetch |
+| Q | Quit |
 
-状态图标：🧨 有未提交改动（含未跟踪文件）；🟡 有领先上游的提交；✓ 工作树干净且与上游一致；`!` 表示落后、分叉、无上游等需要注意的状态。脏状态优先显示图标，提交数量仍独立显示。终端 emoji 宽度异常时使用 `--ascii`（`*` / `+` / `v`）。
+Status icons: 🧨 uncommitted changes, including untracked files; 🟡 commits ahead of the upstream; ✓ a clean working tree matching the upstream; `!` a state requiring attention, such as being behind, diverged, or missing an upstream. The uncommitted-changes icon takes priority, while the commit count is shown independently. If your terminal displays emoji widths incorrectly, use `--ascii` for `*` / `+` / `v` icons.
 
-## Git 行为与边界
+Operations display their current phase: `CHECKING`, `FETCHING`, `PUSHING`, `COMMITTING`, or `SWITCHING`.
 
-- 在仓库内运行时只显示该仓库（子目录也能识别所属仓库）；否则只扫描当前目录的一级子目录，不递归。支持 `.git` 文件形式的 worktree。
-- `Commits` 是 `HEAD` 相对 `@{upstream}` 的领先数量，不是历史总量，也不是未提交文件数。没有可解析上游时显示 `?`；落后和分叉单独显示。历史总数为当前 HEAD 可达的提交数。
-- 默认每 2 秒检查本地，每 60 秒执行 `git fetch --all --quiet`。后台任务不阻塞时钟和键盘；单仓库任务串行，最多四个仓库并行。网络结果只在 fetch 成功后更新，离线时仍显示本地状态和错误。
-- Enter 执行原生 `git push`，遵循仓库已有的 remote、pushRemote、push refspec 和 push.default 配置；可能不止推当前分支，取决于你自己的 Git 配置。`Commits` 比较的是上游；若推送目标与上游不同，这个数量不代表目标端差异。无上游时不会擅自选择远端；Git 若未配置自动建立上游，会显示其错误。
-- C 打开单行提交输入，支持中文、左右移动、Home/End、Backspace/Delete；输入期间 Q 等字母作为文本。输入区明确提示 Enter 将在选中仓库根目录执行 `git add .`，然后执行 `git commit -m`，包含新增、修改、删除的全部改动，遵守 `.gitignore`，不自动 push。按 C 仅打开输入，Esc 取消不修改暂存区。空消息不能提交；没有可提交改动或 Git hook 失败时保留消息以便修改重试。若暂存成功而提交失败，内容保留在暂存区。提交过程显示 `COMMITTING`，成功后更新提交数量和 Last 信息。
-- 不执行 pull、merge、rebase、强推或自动解决冲突。脏仓库可以 push 已有提交。分支切换遇到脏工作树会拒绝，不自动 stash；远端分支通过建立本地跟踪分支切换，同名本地分支已存在时 Git 会拒绝，请选择已有本地分支。
-- Git 使用现有 SSH agent / 凭据管理器；后台不允许终端密码提示。请先在普通终端完成 Git 认证。fetch 超时 30 秒，push 超时 120 秒；退出立即恢复终端，正在执行的 Git 任务会在完成或超时后结束进程。Git hooks 和凭据程序仍遵循本机配置。
-- 界面适合至少 100 列，最小 64×16。长信息按可用宽度截断。Windows 原生终端暂不支持；可在 WSL 中使用。
+## Git behavior and limits
 
-卸载：删除安装路径中的 `pushes` 和补全目录中的 `_pushes`，并按需删除自行添加的 shell 配置。
+- When launched inside a repository, only that repository is shown, including when launched from one of its subdirectories. Otherwise, only immediate child directories are scanned, without recursion. Worktrees using a `.git` file are supported.
+- `Commits` counts commits by which `HEAD` is ahead of `@{upstream}`. It is neither the total history count nor the number of uncommitted files. If no upstream can be resolved, the count is `?`. Behind and diverged states are shown separately. The history count includes all commits reachable from the current HEAD.
+- Local status is checked every 2 seconds by default, and `git fetch --all --quiet` runs every 60 seconds. Background tasks keep the clock and keyboard responsive. Tasks run serially within each repository, with up to four repositories processed concurrently. Remote information is updated after a successful fetch; local status and fetch errors remain visible when offline.
+- Enter runs the native `git push` command, honoring the repository's existing remote, pushRemote, push refspec, and push.default settings. Depending on your Git configuration, this may push more than the current branch. `Commits` compares against the upstream; if the push destination differs from the upstream, this count does not describe the difference at that destination. The application does not choose a remote for you when no upstream is configured. If Git is not configured to set one up automatically, its error is displayed.
+- C opens a single-line commit input supporting Unicode, left/right navigation, Home/End, and Backspace/Delete. Letters such as Q are treated as text while editing. The input area explicitly states that Enter will run `git add .` at the selected repository's root, followed by `git commit -m`. This includes all added, modified, and deleted files, respects `.gitignore`, and does not push automatically. Pressing C only opens the input; Esc cancels without changing the index. Empty messages are rejected. If there is nothing to commit or a Git hook fails, the message is preserved for editing and retrying. If staging succeeds but the commit fails, changes remain staged. The status shows `COMMITTING` during the operation; the commit count and Last details update after success.
+- The application does not pull, merge, rebase, force-push, or resolve conflicts automatically. Existing commits can be pushed from a dirty working tree. Branch switching is refused when the working tree has uncommitted changes, without automatically stashing them. Selecting a remote branch creates a local tracking branch. If a local branch with that name already exists, Git refuses the operation; select the existing local branch instead.
+- Git uses your existing SSH agent or credential manager. Background commands do not allow terminal password prompts, so complete Git authentication in a regular terminal first. Fetch operations time out after 30 seconds; push, staging, and commit operations time out after 120 seconds each. Quitting restores the terminal immediately; any running Git tasks finish or time out before the process exits. Git hooks and credential programs follow your local configuration.
+- A terminal width of at least 100 columns is recommended; the minimum size is 64×16. Long information is truncated to fit. Native Windows terminals are not currently supported; WSL can be used instead.
 
-## 开发验证
+To uninstall, delete `pushes` from the installation directory and `_pushes` from the completion directory, then remove any shell configuration you added if no longer needed.
+
+## Development checks
 
 ```sh
 python3 -m unittest discover -s tests -v
 python3 pushes.py --once
 ```
 
-详细需求与实现取舍见 [docs/requirements.md](docs/requirements.md)。
+See [docs/requirements.md](docs/requirements.md) for the detailed requirements and implementation tradeoffs (in Chinese).
