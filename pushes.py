@@ -110,11 +110,11 @@ class Repo:
     @property
     def icon(self):
         if self.dirty:
-            return "🧨"
+            return "!"
         if self.status in ("ERROR", "DETACHED", "NO UPSTREAM", "EMPTY", "BEHIND", "DIVERGED"):
             return "!"
         if self.ahead:
-            return "🟡"
+            return "↑"
         return "✓" if self.status == "SYNCED" else "·"
 
 
@@ -269,7 +269,7 @@ def draw(screen, repos, selected, root, message, busy, popup, ascii_icons, draft
         status = busy.get(repo.path, repo.status)
         icon = "|/-\\"[int(time.monotonic() * 8) % 4] if status == "PUSHING" else repo.icon
         if ascii_icons:
-            icon = {"🧨": "*", "🟡": "+", "✓": "v", "·": "."}.get(icon, icon)
+            icon = {"↑": "+", "✓": "v", "·": "."}.get(icon, icon)
         attr = curses.A_REVERSE if i == selected else curses.color_pair(3 if repo.dirty or repo.network_error else 2 if repo.ahead or repo.behind else 4 if repo.status == "SYNCED" else 0)
         put(4 + i - start, 1, row(f"{icon} {repo.path.name}", repo.branch,
             "?" if repo.ahead is None else str(repo.ahead), status,

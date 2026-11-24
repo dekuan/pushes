@@ -45,7 +45,7 @@ The header shows the application name, the system's local time updated every sec
 | T | Move the selected repository to the top, keeping it selected, and save the complete order to `.pushes` |
 | Q | Quit |
 
-Status icons: 🧨 uncommitted changes, including untracked files; 🟡 commits ahead of the upstream; ✓ a clean working tree matching the upstream; `!` a state requiring attention, such as being behind, diverged, or missing an upstream. The uncommitted-changes icon takes priority, while the commit count is shown independently. If your terminal displays emoji widths incorrectly, use `--ascii` for `*` / `+` / `v` icons.
+Status icons use compact text symbols: red `!` for uncommitted changes, including untracked files; yellow `↑` for commits ahead of the upstream; green `✓` for a clean working tree matching the upstream. `!` also marks other states requiring attention, such as being behind, diverged, or missing an upstream; the Status and Details columns distinguish them. The uncommitted-changes icon takes priority, while the commit count is shown independently. Use `--ascii` for `!` / `+` / `v` icons.
 
 Repository order is loaded from `.pushes` in the launch directory (or the directory passed on the command line). Each press of T saves the complete current order there as JSON using relative repository paths. Repositories missing from the saved list appear at the end in discovery order; saved entries for repositories that no longer exist are ignored. The file is created only when you press T, and starting or quitting the application does not create or rewrite it. If saving fails, the order still changes for the current session and an error is displayed.
 
