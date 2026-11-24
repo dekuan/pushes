@@ -434,7 +434,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", nargs="?", default=".", type=Path)
     parser.add_argument("--interval", type=positive, default=5, help="local refresh seconds (default: 5)")
-    parser.add_argument("--fetch-interval", type=int, default=10, help="fetch seconds (default: 10); 0 disables automatic fetch")
+    parser.add_argument("--fetch-interval", type=int, default=30, help="fetch seconds (default: 30); 0 disables automatic fetch")
     parser.add_argument("--ascii", action="store_true", help="use plain status icons")
     parser.add_argument("--once", action="store_true", help="print local status and exit without fetching")
     args = parser.parse_args()
