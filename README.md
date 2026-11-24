@@ -49,7 +49,7 @@ Status icons: 🧨 uncommitted changes, including untracked files; 🟡 commits 
 
 Repository order is loaded from `.pushes` in the launch directory (or the directory passed on the command line). Each press of T saves the complete current order there as JSON using relative repository paths. Repositories missing from the saved list appear at the end in discovery order; saved entries for repositories that no longer exist are ignored. The file is created only when you press T, and starting or quitting the application does not create or rewrite it. If saving fails, the order still changes for the current session and an error is displayed.
 
-Local refreshes keep the repository's status visible without flashing an operation label. Remote fetches display `FETCHING`; other operations display `PUSHING`, `COMMITTING`, or `SWITCHING`.
+Local refreshes keep the repository's status visible without flashing an operation label. Remote fetches display `FETCHING`; other operations display `PUSHING`, `COMMITTING`, or `SWITCHING`. While pushing, the repository icon animates through `| / - \` at eight frames per second, then returns to its regular status icon when the push finishes.
 
 ## Git behavior and limits
 

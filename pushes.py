@@ -266,10 +266,10 @@ def draw(screen, repos, selected, root, message, busy, popup, ascii_icons, draft
     visible = height - 14
     start = max(0, selected - visible + 1)
     for i, repo in enumerate(repos[start:start + visible], start):
-        icon = repo.icon
+        status = busy.get(repo.path, repo.status)
+        icon = "|/-\\"[int(time.monotonic() * 8) % 4] if status == "PUSHING" else repo.icon
         if ascii_icons:
             icon = {"🧨": "*", "🟡": "+", "✓": "v", "·": "."}.get(icon, icon)
-        status = busy.get(repo.path, repo.status)
         attr = curses.A_REVERSE if i == selected else curses.color_pair(3 if repo.dirty or repo.network_error else 2 if repo.ahead or repo.behind else 4 if repo.status == "SYNCED" else 0)
         put(4 + i - start, 1, row(f"{icon} {repo.path.name}", repo.branch,
             "?" if repo.ahead is None else str(repo.ahead), status,
