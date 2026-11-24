@@ -397,15 +397,12 @@ def tui(screen, args, root):
             elif key in (curses.KEY_UP, ord('k')):
                 selected = max(0, selected - 1)
             elif key in (ord('f'), ord('F')):
-                old_path = repos[selected].path if repos else None
-                paths = discover(root)
-                existing = {r.path: r for r in repos}
-                repos = [existing.get(p, Repo(p)) for p in paths]
-                selected = paths.index(old_path) if old_path in paths else 0
-                next_scan.clear()
-                next_fetch.clear()
-                requested_fetch.update(paths)
-                message = "Refresh and fetch requested"
+                if repos:
+                    repo = repos[selected]
+                    requested_fetch.add(repo.path)
+                    message = f"Fetch requested for {repo.path.name}"
+                else:
+                    message = "No repository selected"
             elif repos and key in (ord('b'), ord('B'), ord('c'), ord('C'), 10, 13, curses.KEY_ENTER):
                 repo = repos[selected]
                 if repo.path in pending:
