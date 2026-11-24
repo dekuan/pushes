@@ -160,7 +160,7 @@ def update(old, fetch=False, action=None, progress=None):
                 old.network_error = ""
             except GitError as exc:
                 old.network_error = str(exc)
-        phase("CHECKING")
+        phase(None)
         new = inspect(old.path)
         new.fetched, new.network_error = old.fetched, old.network_error
         return new, message
@@ -298,9 +298,13 @@ def tui(screen, args, root):
 
     def submit(repo, fetch=False, action=None):
         path = repo.path
-        activities[path] = {"push": "PUSHING", "commit": "COMMITTING", "switch": "SWITCHING"}[action[0]] if action else "FETCHING" if fetch else "CHECKING"
-        pending[path] = pool.submit(update, repo, fetch, action,
-            lambda status: activities.__setitem__(path, status))
+        def report(status):
+            if status is None:
+                activities.pop(path, None)
+            else:
+                activities[path] = status
+        report({"push": "PUSHING", "commit": "COMMITTING", "switch": "SWITCHING"}[action[0]] if action else "FETCHING" if fetch else None)
+        pending[path] = pool.submit(update, repo, fetch, action, report)
 
     try:
         while True:
@@ -400,7 +404,7 @@ def tui(screen, args, root):
             elif repos and key in (ord('b'), ord('B'), ord('c'), ord('C'), 10, 13, curses.KEY_ENTER):
                 repo = repos[selected]
                 if repo.path in pending:
-                    message = f"Repository busy ({activities[repo.path]}); try again when it finishes"
+                    message = f"Repository busy ({activities.get(repo.path, 'local refresh')}); try again when it finishes"
                 elif key in (ord('c'), ord('C')):
                     if committing:
                         message = "A commit is already in progress; wait for it to finish"
@@ -429,8 +433,8 @@ def positive(value):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", nargs="?", default=".", type=Path)
-    parser.add_argument("--interval", type=positive, default=2, help="local refresh seconds (default: 2)")
-    parser.add_argument("--fetch-interval", type=int, default=60, help="fetch seconds; 0 disables automatic fetch")
+    parser.add_argument("--interval", type=positive, default=5, help="local refresh seconds (default: 5)")
+    parser.add_argument("--fetch-interval", type=int, default=10, help="fetch seconds (default: 10); 0 disables automatic fetch")
     parser.add_argument("--ascii", action="store_true", help="use plain status icons")
     parser.add_argument("--once", action="store_true", help="print local status and exit without fetching")
     args = parser.parse_args()
