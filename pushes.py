@@ -294,7 +294,8 @@ def draw(screen, repos, selected, root, message, busy, popup, ascii_icons, draft
     branch_w = min(24, max(12, width // 6))
     def row(name, branch, commits, status, details):
         return f"{clip(name, repo_w)} {clip(branch, branch_w)} {clip(commits, 7)} {clip(status, 11)} {details}"
-    put(3, 3, row("Repo", "Branch", "Commits", "Status", "Details"), title)
+    repo_count = str(len(repos)).translate(str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹"))
+    put(3, 3, row(f"Repo {repo_count}", "Branch", "Commits", "Status", "Details"), title)
     visible = height - 14
     start = max(0, selected - visible + 1)
     for i, repo in enumerate(repos[start:start + visible], start):
