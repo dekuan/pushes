@@ -268,6 +268,25 @@ def should_fetch(repo, interval, now, deadline, manual=False):
     return manual or (interval > 0 and repo.ahead is not None and repo.ahead > 0 and now >= deadline)
 
 
+def initialize_colors():
+    if not curses.has_colors():
+        return
+    curses.start_color()
+    curses.use_default_colors()
+    heading, detail, quiet = curses.COLOR_CYAN, curses.COLOR_WHITE, curses.COLOR_WHITE
+    if curses.COLORS >= 256:
+        heading, detail, quiet = 110, 250, 245
+        if curses.can_change_color():
+            try:
+                curses.init_color(16, 569, 655, 761)  # #91A7C2, muted blue
+                heading = 16
+            except curses.error:
+                pass
+    for number, color in enumerate((heading, curses.COLOR_YELLOW, curses.COLOR_RED,
+                                    curses.COLOR_GREEN, detail, quiet), 1):
+        curses.init_pair(number, color, -1)
+
+
 def draw(screen, repos, selected, root, message, busy, popup, ascii_icons, draft=None):
     screen.erase()
     height, width = screen.getmaxyx()
@@ -285,11 +304,13 @@ def draw(screen, repos, selected, root, message, busy, popup, ascii_icons, draft
         screen.refresh()
         return
     title = curses.color_pair(1) | curses.A_BOLD
+    secondary = curses.color_pair(5)
+    quiet = curses.color_pair(6)
     clock = dt.datetime.now().astimezone().isoformat(sep=" ", timespec="seconds")
     put(0, 1, f"Pushes for Git {VERSION}", title)
     put(0, max(20, width - len(clock) - 2), clock, title)
     put(1, 1, f"Local → {root}", title)
-    put(2, 0, "─" * (width - 1))
+    put(2, 0, "─" * (width - 1), quiet)
     repo_w = min(34, max(17, width // 4))
     branch_w = min(24, max(12, width // 6))
     def row(name, branch, commits, status, details):
@@ -313,16 +334,16 @@ def draw(screen, repos, selected, root, message, busy, popup, ascii_icons, draft
     if not repos:
         put(4, 1, "No Git repositories here or in immediate child directories.")
     base = height - 10
-    put(base, 0, "─" * (width - 1))
+    put(base, 0, "─" * (width - 1), quiet)
     if repos:
         repo = repos[selected]
-        put(base + 1, 1, "Remote: " + repo.remotes)
-        put(base + 2, 1, "Last: " + repo.last)
-        put(base + 3, 1, f"History: {repo.total} {'commit' if repo.total == '1' else 'commits'}, Fetched: {repo.fetched}")
-        put(base + 4, 1, f"Upstream: {repo.upstream or 'unset'}")
-        put(base + 5, 1, "Fetch: " + repo.network_error if repo.network_error else repo.detail)
+        put(base + 1, 1, "Remote: " + repo.remotes, secondary)
+        put(base + 2, 1, "Last: " + repo.last, secondary)
+        put(base + 3, 1, f"History: {repo.total} {'commit' if repo.total == '1' else 'commits'}, Fetched: {repo.fetched}", secondary)
+        put(base + 4, 1, f"Upstream: {repo.upstream or 'unset'}", secondary)
+        put(base + 5, 1, "Fetch: " + repo.network_error if repo.network_error else repo.detail, secondary)
     put(height - 3, 1, "Message: " + message, title)
-    put(height - 1, 1, "↑/↓ select  Enter push  C commit  B branches  F fetch  T top  Q quit", title)
+    put(height - 1, 1, "↑/↓ select  Enter push  C commit  B branches  F fetch  T top  Q quit", quiet)
     if popup is not None:
         entries, choice = popup
         box_h = min(len(entries) + 3, height - 4)
@@ -357,11 +378,7 @@ def tui(screen, args, root):
         curses.curs_set(0)
     except curses.error:
         pass
-    if curses.has_colors():
-        curses.start_color()
-        curses.use_default_colors()
-        for n, color in enumerate((curses.COLOR_YELLOW, curses.COLOR_YELLOW, curses.COLOR_RED, curses.COLOR_GREEN), 1):
-            curses.init_pair(n, color, -1)
+    initialize_colors()
     screen.timeout(100)
     paths = discover(root)
     selected, popup, message = 0, None, "Checking repositories…"

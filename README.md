@@ -45,6 +45,8 @@ The header shows the application name, the system's local time updated every sec
 
 The selected repository is marked with a left-side `▶` and bold text, preserving its status color and the terminal background. With `--ascii`, the marker is `>`.
 
+Headings and regular messages use muted blue, with light-gray details and slightly darker gray separators and shortcuts. Status colors remain red, yellow, and green. The palette adapts to the terminal's color capabilities, using an approximate blue on fixed 256-color palettes and cyan on basic color terminals; the terminal background is preserved.
+
 | Key | Action |
 | --- | --- |
 | ↑ / ↓ or K / J | Select a repository or branch |
