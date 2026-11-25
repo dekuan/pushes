@@ -23,6 +23,8 @@
 
 ## 技术选择
 
+Push 失败后，对该仓库自动 fetch 一次并刷新状态，不受未推送数量或自动 fetch 开关限制；保留原始 push 错误及 fetch 结果，不自动重试 push、不 pull 或合并。此次 fetch 计入刷新间隔，避免立即再次自动抓取。
+
 采用 Python 3.9+ 标准库 curses、subprocess、concurrent.futures。纯 shell 能实现简单菜单，但动态刷新、键盘、弹窗、字符宽度和后台任务会让实现复杂且脆弱。Go/Rust 可将来提供单文件二进制、免 Python 安装，但需要按系统和架构构建发布。当前 Python 方案便于自行修改、无第三方依赖。
 
 macOS 优先，Linux 可用；Windows 原生支持留待后续。URL 安装脚本已准备，必须先发布代码才可从 GitHub 下载。本次不自动提交或推送开发中的项目代码。

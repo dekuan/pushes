@@ -105,6 +105,7 @@ class Repo:
     detail: str = ""
     branches: list = field(default_factory=list)
     fetched: str = "Never"
+    fetch_attempt: float = 0
     network_error: str = ""
 
     @property
@@ -181,28 +182,42 @@ def operate(path, action, expected_branch, target=None):
 
 def update(old, fetch=False, action=None, progress=None):
     message = ""
+    push_error = ""
     def phase(status):
         if progress is not None:
             progress(status)
     try:
         if action:
             phase({"push": "PUSHING", "commit": "COMMITTING", "switch": "SWITCHING"}[action[0]])
-            message = operate(old.path, *action)
+            try:
+                message = operate(old.path, *action)
+            except GitError as exc:
+                if action[0] != "push":
+                    raise
+                push_error = str(exc)
+                message = f"Push failed: {push_error}"
+                fetch = True
         if fetch:
             phase("FETCHING")
+            old.fetch_attempt = time.monotonic()
             try:
                 git(old.path, "fetch", "--all", "--quiet", timeout=30)
                 old.fetched = dt.datetime.now().astimezone().strftime("%H:%M:%S %z")
                 old.network_error = ""
             except GitError as exc:
                 old.network_error = str(exc)
+            if push_error:
+                message += (f"; Automatic fetch failed: {old.network_error}" if old.network_error
+                            else "; Automatic fetch succeeded; repository status refreshed")
         phase(None)
         new = inspect(old.path)
         new.fetched, new.network_error = old.fetched, old.network_error
+        new.fetch_attempt = old.fetch_attempt
         return new, message
     except GitError as exc:
-        old.status, old.detail = "ERROR", str(exc)
-        return old, str(exc)
+        error = f"{message}; Refresh failed: {exc}" if push_error else str(exc)
+        old.status, old.detail = "ERROR", error
+        return old, error
 
 
 def clean(value):
@@ -360,6 +375,8 @@ def tui(screen, args, root):
             for path, future in list(pending.items()):
                 if future.done():
                     result, note = future.result()
+                    if result.fetch_attempt:
+                        next_fetch[path] = result.fetch_attempt + args.fetch_interval
                     repos = [result if r.path == path else r for r in repos]
                     if note:
                         message = note

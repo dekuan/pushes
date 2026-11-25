@@ -215,6 +215,37 @@ class GitIntegration(unittest.TestCase):
         self.assertIn("hook rejected commit", message)
         self.assertEqual(self.run_git(self.repo, "rev-list", "--count", "HEAD"), "1")
 
+    def test_rejected_push_fetches_once_without_retry_or_merge(self):
+        peer = self.root / "peer"
+        self.run_git(self.root, "clone", "-b", "main", str(self.remote), str(peer))
+        self.commit(peer, "remote change")
+        self.run_git(peer, "push")
+        remote_head = self.run_git(peer, "rev-parse", "HEAD")
+        self.commit(self.repo, "local change")
+        local_head = self.run_git(self.repo, "rev-parse", "HEAD")
+        phases = []
+        with patch.object(pushes, "git", wraps=pushes.git) as commands:
+            result, message = pushes.update(pushes.inspect(self.repo),
+                action=("push", "main"), progress=phases.append)
+        self.assertEqual(sum(c.args[1] == "push" for c in commands.call_args_list), 1)
+        self.assertEqual(sum(c.args[1] == "fetch" for c in commands.call_args_list), 1)
+        self.assertEqual(phases, ["PUSHING", "FETCHING", None])
+        self.assertEqual((result.status, result.ahead, result.behind), ("DIVERGED", 1, 1))
+        self.assertIn("Push failed:", message)
+        self.assertIn("Automatic fetch succeeded", message)
+        self.assertEqual(self.run_git(self.repo, "rev-parse", "HEAD"), local_head)
+        self.assertEqual(self.run_git(self.remote, "rev-parse", "main"), remote_head)
+
+    def test_failed_push_and_fetch_preserve_both_errors(self):
+        self.run_git(self.repo, "remote", "set-url", "origin", str(self.root / "missing"))
+        repo = pushes.inspect(self.repo)
+        with patch.object(pushes, "operate", side_effect=pushes.GitError("original push error")) as operation:
+            result, message = pushes.update(repo, action=("push", "main"))
+        operation.assert_called_once()
+        self.assertIn("original push error", message)
+        self.assertIn("Automatic fetch failed:", message)
+        self.assertTrue(result.network_error)
+
 
 if __name__ == "__main__":
     unittest.main()
