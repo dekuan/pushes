@@ -1,5 +1,6 @@
 import os
 import json
+import shutil
 from pathlib import Path
 import subprocess
 import tempfile
@@ -53,6 +54,11 @@ class TerminalFormatting(unittest.TestCase):
         self.assertEqual(pushes.clip("Repo     Branch", 15), "Repo     Branch")
         self.assertEqual(pushes.clip("仓库abc", 5), "仓库a")
         self.assertNotIn("\x1b", pushes.clean("bad\x1b[2J\nname"))
+
+    def test_embedded_version_does_not_read_working_directory(self):
+        with patch.object(pushes, "BUILD_VERSION", "r42"), patch.object(pushes, "optional") as git_read:
+            self.assertEqual(pushes.application_version(), "r42")
+            git_read.assert_not_called()
 
 
 class FetchPolicy(unittest.TestCase):
@@ -245,6 +251,26 @@ class GitIntegration(unittest.TestCase):
         self.assertIn("original push error", message)
         self.assertIn("Automatic fetch failed:", message)
         self.assertTrue(result.network_error)
+
+    def test_install_embeds_version_and_next_commit_increments_it(self):
+        source = Path(pushes.__file__).resolve().parent
+        for name in ("pushes.py", "install.sh", "completions/_pushes"):
+            target = self.repo / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source / name, target)
+        self.commit(self.repo, "add application")
+        install_dir = self.root / "installed"
+        env = dict(os.environ, PUSHES_BIN_DIR=str(install_dir),
+                   PUSHES_COMPLETION_DIR=str(self.root / "completion"))
+        for expected in ("r2", "r3"):
+            result = subprocess.run(["sh", str(self.repo / "install.sh")],
+                                    env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            installed = subprocess.check_output(
+                [str(install_dir / "pushes"), "--version"], cwd=self.root, text=True)
+            self.assertEqual(installed.strip(), f"Pushes for Git {expected}")
+            if expected == "r2":
+                self.commit(self.repo, "ordinary next commit")
 
 
 if __name__ == "__main__":

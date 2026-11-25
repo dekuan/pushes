@@ -28,7 +28,16 @@ python3 pushes.py /path/to/projects
 python3 pushes.py --fetch-interval 120
 python3 pushes.py --fetch-interval 0 --ascii
 python3 pushes.py --once
+python3 pushes.py --version
 ```
+
+## Application version
+
+The title displays Pushes' own revision, such as `Pushes for Git r12`. Run `pushes --version` to check the installed version. The number comes from the commit count of the **Pushes source repository**, not the repositories shown in the dashboard.
+
+No special commit command, version-file edit, or Git hook is needed. Each ordinary new commit on the same linear branch increases the count by one. Publish your changes and rerun the URL installer to update an installed copy; for a local checkout, rerun `sh install.sh`. The installer embeds the revision into the installed script, so it works from any directory without contacting GitHub at runtime. URL installation temporarily clones the full `main` history to obtain matching source files and their revision. Direct execution from a source checkout reads that checkout's count at startup. A source archive without Git history displays `dev`; local installation from a shallow clone requires `git fetch --unshallow` first.
+
+This is a simple revision counter, not a semantic version or a globally unique commit identifier. Merges, branch changes, or rewritten history can cause skipped, repeated, or lower numbers. Uncommitted edits do not increase the number, and an installed copy keeps its embedded version until reinstalled.
 
 ## Interface and controls
 

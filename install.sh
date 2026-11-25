@@ -13,17 +13,41 @@ source_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 task_tmp=$(mktemp -d)
 trap 'rm -rf "$task_tmp"' EXIT HUP INT TERM
 if [ -f "$source_dir/pushes.py" ] && [ -f "$source_dir/completions/_pushes" ]; then
-    cp "$source_dir/pushes.py" "$task_tmp/pushes"
-    cp "$source_dir/completions/_pushes" "$task_tmp/_pushes"
+    version_source=$source_dir
 else
-    command -v curl >/dev/null 2>&1 || { echo 'curl is required.' >&2; exit 1; }
-    base=https://raw.githubusercontent.com/dekuan/pushes/main
-    curl -fsSL "$base/pushes.py" -o "$task_tmp/pushes"
-    curl -fsSL "$base/completions/_pushes" -o "$task_tmp/_pushes"
+    # Full main-branch history provides the revision count without commit hooks.
+    # Source files and their version come from the same checkout.
+    git clone --quiet --single-branch --no-tags --branch main \
+        https://github.com/dekuan/pushes.git "$task_tmp/source"
+    version_source=$task_tmp/source
 fi
+cp "$version_source/pushes.py" "$task_tmp/pushes"
+cp "$version_source/completions/_pushes" "$task_tmp/_pushes"
+installed_version=$(python3 - "$version_source" "$task_tmp/pushes" <<'PY'
+from pathlib import Path
+import subprocess
+import sys
+
+source, target = map(Path, sys.argv[1:])
+version = "dev"
+if (source / ".git").exists():
+    count = subprocess.check_output(["git", "-C", str(source), "rev-list", "--count", "HEAD"], text=True).strip()
+    if not count.isdigit():
+        raise SystemExit("Invalid Git revision count")
+    if subprocess.check_output(["git", "-C", str(source), "rev-parse", "--is-shallow-repository"], text=True).strip() == "true":
+        raise SystemExit("Full Git history required for versioning; run git fetch --unshallow first")
+    version = f"r{count}"
+text = target.read_text(encoding="utf-8")
+marker = 'BUILD_VERSION = ""'
+if text.count(marker) != 1:
+    raise SystemExit("Could not embed the Pushes version")
+target.write_text(text.replace(marker, f'BUILD_VERSION = "{version}"', 1), encoding="utf-8")
+print(version)
+PY
+)
 mkdir -p "$install_dir" "$completion_dir"
 install -m 755 "$task_tmp/pushes" "$install_dir/pushes"
 install -m 644 "$task_tmp/_pushes" "$completion_dir/_pushes"
-printf 'Installed: %s/pushes\n\nAdd to ~/.zshrc if needed:\n' "$install_dir"
+printf 'Installed: %s/pushes (%s)\n\nAdd to ~/.zshrc if needed:\n' "$install_dir" "$installed_version"
 printf 'export PATH="%s:$PATH"\nfpath=("%s" $fpath)\nautoload -Uz compinit && compinit\n' "$install_dir" "$completion_dir"
 printf '\nThen open a new terminal and run pushes in any project directory.\n'

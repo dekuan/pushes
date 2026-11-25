@@ -16,6 +16,9 @@ import unicodedata
 from dataclasses import dataclass, field
 
 
+BUILD_VERSION = ""
+
+
 class GitError(Exception):
     pass
 
@@ -40,6 +43,20 @@ def optional(path, *args):
         return git(path, *args)
     except GitError:
         return ""
+
+
+def application_version():
+    if BUILD_VERSION:
+        return BUILD_VERSION
+    source = Path(__file__).resolve().parent
+    if (source / ".git").exists():
+        count = optional(source, "rev-list", "--count", "HEAD")
+        if count.isdigit():
+            return f"r{count}"
+    return "dev"
+
+
+VERSION = application_version()
 
 
 def discover(root):
@@ -269,7 +286,7 @@ def draw(screen, repos, selected, root, message, busy, popup, ascii_icons, draft
         return
     title = curses.color_pair(1) | curses.A_BOLD
     clock = dt.datetime.now().astimezone().isoformat(sep=" ", timespec="seconds")
-    put(0, 1, "Pushes for Git", title)
+    put(0, 1, f"Pushes for Git {VERSION}", title)
     put(0, max(20, width - len(clock) - 2), clock, title)
     put(1, 1, f"Local → {root}", title)
     put(2, 0, "─" * (width - 1))
@@ -504,6 +521,7 @@ def positive(value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--version", action="version", version=f"Pushes for Git {VERSION}")
     parser.add_argument("directory", nargs="?", default=".", type=Path)
     parser.add_argument("--interval", type=positive, default=5, help="local refresh seconds (default: 5)")
     parser.add_argument("--fetch-interval", type=int, default=30, help="automatic fetch seconds when ahead > 0 (default: 30); 0 disables")

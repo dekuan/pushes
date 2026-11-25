@@ -4,5 +4,6 @@ _arguments \
   '--fetch-interval[automatic fetch interval when ahead > 0; 0 disables]:seconds:' \
   '--ascii[use plain status icons]' \
   '--once[print local status and exit]' \
+  '--version[show the installed Pushes version]' \
   '--help[show help]' \
   '1:directory:_directories'
