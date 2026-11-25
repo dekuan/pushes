@@ -30,3 +30,7 @@ Push 失败后，对该仓库自动 fetch 一次并刷新状态，不受未推�
 采用 Python 3.9+ 标准库 curses、subprocess、concurrent.futures。纯 shell 能实现简单菜单，但动态刷新、键盘、弹窗、字符宽度和后台任务会让实现复杂且脆弱。Go/Rust 可将来提供单文件二进制、免 Python 安装，但需要按系统和架构构建发布。当前 Python 方案便于自行修改、无第三方依赖。
 
 macOS 优先，Linux 可用；Windows 原生支持留待后续。URL 安装脚本已准备，必须先发布代码才可从 GitHub 下载。本次不自动提交或推送开发中的项目代码。
+
+## 分支菜单更新
+
+按 B 立即列出本地分支，底部旋转标志显示 Loading remote branches…，后台通过 git ls-remote --heads 查询各远端的实时列表，不下载对象。仅补充本地没有同名分支的远端项，以 [remote] 前缀显示。查询期间本地分支可选择，Esc 可取消菜单；查询失败保留本地分支并显示错误。选择远端项后 fetch 对应分支、创建本地跟踪分支并切换；不自动合并、覆盖或 stash。

@@ -146,9 +146,6 @@ def inspect(path):
         line.rsplit(" ", 1)[0].replace("\t", " ") for line in remote_lines
     )) or repo.remotes
     repo.branches = [(b, False) for b in git(path, "for-each-ref", "--format=%(refname:short)", "refs/heads").splitlines()]
-    remote_refs = git(path, "for-each-ref", "--format=%(refname:short)\t%(symref)", "refs/remotes")
-    repo.branches += [(line.partition("\t")[0], True) for line in remote_refs.splitlines()
-                      if not line.partition("\t")[2] and not line.partition("\t")[0].endswith("/HEAD")]
     if head:
         repo.total = git(path, "rev-list", "--count", "HEAD")
         repo.last = git(path, "log", "-1", "--format=%h, %ai, %s")
@@ -193,7 +190,15 @@ def operate(path, action, expected_branch, target=None):
         raise GitError("Working tree has uncommitted changes; commit or stash first")
     name, remote = target
     if remote:
-        return git(path, "switch", "--track", "-c", name.split("/", 1)[1], name)
+        remote_name, branch = name.split("/", 1)
+        git(path, "fetch", "--no-tags", "--", remote_name,
+            f"+refs/heads/{branch}:refs/remotes/{remote_name}/{branch}", timeout=30)
+        # Recheck after network I/O before modifying the working tree.
+        if optional(path, "symbolic-ref", "--quiet", "--short", "HEAD") != expected_branch:
+            raise GitError("Branch changed while fetching; refresh and try again")
+        if git(path, "status", "--porcelain", "--untracked-files=normal"):
+            raise GitError("Working tree changed while fetching; commit or stash first")
+        return git(path, "switch", "--track", "-c", branch, f"refs/remotes/{remote_name}/{branch}")
     return git(path, "switch", "--", name)
 
 
@@ -258,6 +263,42 @@ class CommitDraft:
     branch: str
     text: str = ""
     cursor: int = 0
+
+
+@dataclass
+class BranchMenu:
+    path: Path
+    entries: list
+    choice: int = 0
+    future: object = None
+    loading: bool = True
+    note: str = ""
+
+
+def remote_branches(path):
+    """Query the server directly without fetching objects or changing refs."""
+    entries, errors = [], []
+    for remote in git(path, "remote").splitlines():
+        try:
+            refs = git(path, "ls-remote", "--heads", "--", remote, timeout=30)
+            for line in refs.splitlines():
+                _, _, ref = line.partition("\t")
+                if ref.startswith("refs/heads/"):
+                    entries.append((f"{remote}/{ref[len('refs/heads/'):]}", True))
+        except GitError as exc:
+            errors.append(f"{remote}: {exc}")
+    return entries, "; ".join(errors)
+
+
+def finish_branch_menu(menu, remote_entries, error):
+    local = [(b, False) for b in git(menu.path, "for-each-ref", "--format=%(refname:short)", "refs/heads").splitlines()]
+    names = {name for name, _ in local}
+    selected = menu.entries[menu.choice] if menu.entries else None
+    menu.entries = local + [(name, True) for name, _ in remote_entries
+                            if name.split("/", 1)[1] not in names]
+    menu.choice = menu.entries.index(selected) if selected in menu.entries else 0
+    menu.loading = False
+    menu.note = f"Remote lookup failed: {error}" if error else "Remote branches loaded"
 
 
 def cell_width(text):
@@ -345,7 +386,7 @@ def draw(screen, repos, selected, root, message, busy, popup, ascii_icons, draft
     put(height - 3, 1, "Message: " + message, title)
     put(height - 1, 1, "↑/↓ select  Enter push  C commit  B branches  F fetch  T top  Q quit", quiet)
     if popup is not None:
-        entries, choice = popup
+        entries, choice = popup.entries, popup.choice
         box_h = min(len(entries) + 3, height - 4)
         box_w = min(width - 4, 70)
         y, x = (height - box_h) // 2, (width - box_w) // 2
@@ -354,8 +395,11 @@ def draw(screen, repos, selected, root, message, busy, popup, ascii_icons, draft
         put(y, x + 1, "Branches · Enter switch · Esc cancel", title)
         offset = max(0, choice - (box_h - 3))
         for n, (name, remote) in enumerate(entries[offset:offset + box_h - 2], offset):
-            put(y + n - offset + 1, x + 1, clip(name + (" [remote]" if remote else ""), box_w - 2),
+            put(y + n - offset + 1, x + 1, clip(("[remote] " if remote else "") + name, box_w - 2),
                 curses.A_REVERSE if n == choice else curses.A_NORMAL)
+        spinner = "|/-\\"[int(time.monotonic() * 8) % 4]
+        footer = f"{spinner} Loading remote branches…" if popup.loading else popup.note
+        put(y + box_h - 1, x + 1, clip(footer, box_w - 2), secondary)
     if draft is not None:
         prefix = "Commit: "
         available = width - len(prefix) - 2
@@ -407,6 +451,14 @@ def tui(screen, args, root):
     try:
         while True:
             now = time.monotonic()
+            if popup is not None and popup.loading and popup.future.done():
+                try:
+                    entries, error = popup.future.result()
+                    finish_branch_menu(popup, entries, error)
+                except GitError as exc:
+                    popup.loading, popup.note = False, f"Branch lookup failed: {exc}"
+                if "failed:" in popup.note:
+                    message = popup.note
             for path, future in list(pending.items()):
                 if future.done():
                     result, note = future.result()
@@ -425,6 +477,8 @@ def tui(screen, args, root):
                             selected = next(i for i, r in enumerate(repos) if r.path == path)
             for repo in repos:
                 if draft is not None and repo.path == draft.path:
+                    continue
+                if popup is not None and repo.path == popup.path:
                     continue
                 fetch = should_fetch(repo, args.fetch_interval, now,
                                      next_fetch.get(repo.path, 0), repo.path in requested_fetch)
@@ -474,13 +528,14 @@ def tui(screen, args, root):
             if key in (ord('q'), ord('Q')):
                 break
             if popup is not None:
-                entries, choice = popup
+                entries, choice = popup.entries, popup.choice
                 if key == 27:
+                    popup.future.cancel()
                     popup = None
                 elif key in (curses.KEY_DOWN, ord('j')):
-                    popup = (entries, min(len(entries) - 1, choice + 1))
+                    popup.choice = min(max(0, len(entries) - 1), choice + 1)
                 elif key in (curses.KEY_UP, ord('k')):
-                    popup = (entries, max(0, choice - 1))
+                    popup.choice = max(0, choice - 1)
                 elif key in (10, 13, curses.KEY_ENTER) and entries:
                     repo = repos[selected]
                     if repo.path not in pending:
@@ -519,9 +574,8 @@ def tui(screen, args, root):
                         draft = CommitDraft(repo.path, repo.branch)
                         message = "Enter runs git add . + commit: ALL changes, respects .gitignore"
                 elif key in (ord('b'), ord('B')):
-                    popup = (repo.branches, 0) if repo.branches else None
-                    if popup is None:
-                        message = "No branches available"
+                    popup = BranchMenu(repo.path, list(repo.branches))
+                    popup.future = pool.submit(remote_branches, repo.path)
                 else:
                     submit(repo, action=("push", repo.branch))
                     message = f"Pushing {repo.path.name}…"
