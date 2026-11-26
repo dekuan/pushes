@@ -111,6 +111,19 @@ class GitIntegration(unittest.TestCase):
         self.run_git(path, "add", ".")
         self.run_git(path, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", content)
 
+    def test_uncommitted_file_count_handles_renames_and_untracked_directories(self):
+        self.run_git(self.repo, "mv", "file.txt", "renamed.txt")
+        (self.repo / "renamed.txt").write_text("also changed after staging")
+        (self.repo / "new folder").mkdir()
+        (self.repo / "new folder" / "a").touch()
+        (self.repo / "new folder" / "line\nb").touch()
+        repo = pushes.inspect(self.repo)
+        self.assertEqual(repo.uncommitted_files, 3)
+        self.assertTrue(repo.detail.startswith("Uncommitted 3F: ↑0 ↓0"), repo.detail)
+        self.run_git(self.repo, "reset", "--hard", "HEAD")
+        (self.repo / "file.txt").unlink()
+        self.assertEqual(pushes.inspect(self.repo).uncommitted_files, 3)
+
     def test_counts_dirty_push_and_no_upstream(self):
         repo = pushes.inspect(self.repo)
         self.assertEqual((repo.status, repo.ahead, repo.icon), ("SYNCED", 0, "✓"))

@@ -23,7 +23,7 @@ class GitError(Exception):
     pass
 
 
-def git(path, *args, timeout=15):
+def git(path, *args, timeout=15, strip=True):
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0", LC_ALL="C")
     # Background authentication must never hold the terminal waiting for input.
     env.setdefault("GIT_SSH_COMMAND", "ssh -oBatchMode=yes -oConnectTimeout=10")
@@ -35,7 +35,7 @@ def git(path, *args, timeout=15):
         raise GitError(str(exc)) from exc
     if result.returncode:
         raise GitError((result.stderr or result.stdout).strip() or "Git command failed")
-    return result.stdout.strip()
+    return result.stdout.strip() if strip else result.stdout
 
 
 def optional(path, *args):
@@ -115,6 +115,7 @@ class Repo:
     ahead: object = None
     behind: int = 0
     dirty: bool = False
+    uncommitted_files: int = 0
     total: str = "0"
     last: str = "No commits"
     remotes: str = "No remote configured"
@@ -136,11 +137,25 @@ class Repo:
         return "✓" if self.status == "SYNCED" else "·"
 
 
+def count_uncommitted(path):
+    records = iter(git(path, "status", "--porcelain=v1", "-z", "--untracked-files=all", strip=False).split("\0"))
+    count = 0
+    for record in records:
+        if not record:
+            continue
+        count += 1
+        # Rename/copy entries include a second NUL-delimited path, not another file.
+        if "R" in record[:2] or "C" in record[:2]:
+            next(records, None)
+    return count
+
+
 def inspect(path):
     repo = Repo(path)
     repo.branch = optional(path, "symbolic-ref", "--quiet", "--short", "HEAD")
     head = optional(path, "rev-parse", "--verify", "HEAD")
-    repo.dirty = bool(git(path, "status", "--porcelain", "--untracked-files=normal"))
+    repo.uncommitted_files = count_uncommitted(path)
+    repo.dirty = repo.uncommitted_files > 0
     remote_lines = git(path, "remote", "-v").splitlines()
     repo.remotes = ", ".join(dict.fromkeys(
         line.rsplit(" ", 1)[0].replace("\t", " ") for line in remote_lines
@@ -164,7 +179,7 @@ def inspect(path):
                        else "READY" if repo.ahead else "SYNCED")
         repo.detail = f"↑{repo.ahead} ↓{repo.behind} vs {repo.upstream}"
     if repo.dirty:
-        repo.detail = "Uncommitted changes; " + repo.detail
+        repo.detail = f"Uncommitted {repo.uncommitted_files}F: " + repo.detail
         if repo.status in ("READY", "SYNCED"):
             repo.status = "DIRTY"
     return repo
